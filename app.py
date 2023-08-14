@@ -1,42 +1,41 @@
-# Import os to set API key
 import os
+from io import StringIO
+
+import docx
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 from settings import openai_api_key
-# Import OpenAI as main LLM service
 from langchain.llms import OpenAI
 from langchain.embeddings import OpenAIEmbeddings
-# Bring in streamlit for UI/app interface
 import streamlit as st
 
-# Import PDF document loaders...there's other ones as well!
 from langchain.document_loaders import Docx2txtLoader
-# Import chroma as the vector store 
 from langchain.vectorstores import Chroma
 
-# Import vector store stuff
 from langchain.agents.agent_toolkits import (
     create_vectorstore_agent,
     VectorStoreToolkit,
     VectorStoreInfo
 )
+from docx import Document
 
-# Set APIkey for OpenAI Service
-# Can sub this out for other LLM providers
 os.environ['OPENAI_API_KEY'] = openai_api_key
 
 # Create instance of OpenAI LLM
-llm = OpenAI(temperature=0.1, verbose=True) #'text-embedding-ada-002'
-embeddings = OpenAIEmbeddings() # embedding_ctx_length=8191
+llm = OpenAI(temperature=1, verbose=True)
+embeddings = OpenAIEmbeddings()
+
 
 # Create and load PDF Loader
 loader = Docx2txtLoader('MSAReviewPlaybook.docx')
-# Split pages from pdf 
+# Split pages from pdf
 pages = loader.load_and_split()
 # Load documents into vector database aka ChromaDB
-store = Chroma.from_documents(pages, embeddings, collection_name='msa_review_playbook')
+store = Chroma.from_documents(pages, embeddings, collection_name='msa_playbook')
 
 # Create vectorstore info object - metadata repo?
 vectorstore_info = VectorStoreInfo(
-    name="msa_review_playbook",
+    name="msa_playbook",
     description="contract rules",
     vectorstore=store
 )
@@ -47,24 +46,42 @@ toolkit = VectorStoreToolkit(vectorstore_info=vectorstore_info)
 agent_executor = create_vectorstore_agent(
     llm=llm,
     toolkit=toolkit,
-    verbose=True
+    verbose=True,
+    prefix='The following are sections of an MSA draft. Compare this document with the MSA Review Playbook and list any potential issues with the draft:'
 )
 st.title('🦜🔗 MSA Review Playbook')
 # Create a text input box for the user
-prompt = st.text_input('Input your prompt here')
+uploaded_file = st.file_uploader('Submit MSA Draft (docx)', type=['docx'])
 
-# If the user hits enter
-if prompt:
-    # Then pass the prompt to the LLM
-    print("getting response")
-    response = agent_executor.run(prompt)
-    print(response)
-    # ...and write it out to the screen
-    st.write(response)
+if uploaded_file:
+    try:
+        bytes_data = uploaded_file.getvalue()
 
-    # With a streamlit expander  
-    # with st.expander('Document Similarity Search'):
-    #     # Find the relevant pages
-    #     search = store.similarity_search_with_score(prompt)
-    #     # Write out the first
-    #     st.write(search[0][0].page_content)
+        doc: Document = Document(uploaded_file)
+
+        chunks = []
+        print("STARTING")
+
+        # "Here are chunks of a MSA file. Once I input 'END OF FILE', compare with the MSA playbook and return any potential problems"
+        agent_executor.run('Here are chunks of a MSA file. Once I input "END OF FILE", compare with the MSA playbook and return any potential problems')
+
+        count = 0
+        sub = 0
+        for paragraph in doc.paragraphs:
+            print(f'PROGRESS: {count}.{sub}')
+            text = paragraph.text
+            if not text.isspace() and not text == "":
+                if len(text) > 100:
+                    for s in text.split('.'):
+                        sub += 1
+                        agent_executor.run(s)
+                else:
+                    agent_executor.run(text)
+            count += 1
+            sub = 0
+
+        response = agent_executor.run('END OF FILE')
+        st.write(response)
+    except Exception as e:
+        st.write(e)
+
