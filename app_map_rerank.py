@@ -17,27 +17,22 @@ pages = loader.load_and_split()
 playbook_docs = loader.load_and_split()
 
 output_parser = RegexParser(
-    regex=r"(.*?)\nReason: (.*?)\nScore: (.*)",
+    regex=r".*?Issue:(.*)\nReason:(.*)\nScore:(.*)",
     output_keys=["answer", "reason", "score"],
 )
+# Query: As a paralegal for the Service Provider, what issues can you find in the given MSA section according to the playbook?
 
-prompt_template = """Use the following pieces of context to identify unacceptable language with a section of an MSA, and why it is unacceptable.
-In addition to listing the issue and the reason, also return a score of you confident you are that issues are present.
-If no issue found, answer "None" for issues and reason, and 0 for score.
-Use the exact format below to answer:
-
-Issues: [answer here, "None" if none]
-Reason: [reason for answer, "None" if none]
-Score: [score between 0 and 100]
-
-Begin!
-
-Context:
----------
+prompt_template = """MSA Playbook Context: generally acceptable and unacceptable changes
 {context}
----------
-MSA Section: {msa_section}
-Any unacceptable language found, and why it is unacceptable:"""
+
+MSA Section to Review: 
+{msa_section}
+
+Query: As a paralegal representing the Service Provider, identify language in the given MSA section that could pose risks or is unacceptable for the Service Provider based on the playbook's guidelines.
+Answer with issue, reason, and score. Use this exact format to answer:
+Issue: [Unacceptable Language Issue Found]
+Reason: [Reason why the language is unacceptable]
+Score: [Score indicating the severity of the issue on a scale of 1 to 100]"""
 PROMPT = PromptTemplate(
     template=prompt_template,
     input_variables=["context", "msa_section"],
