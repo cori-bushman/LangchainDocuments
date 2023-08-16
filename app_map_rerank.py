@@ -1,6 +1,9 @@
 import os
+
+import pandas as pd
 from langchain import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from settings import openai_api_key
 from langchain.llms import OpenAI
@@ -14,7 +17,8 @@ llm = OpenAI(temperature=1, verbose=True)
 
 loader = Docx2txtLoader('MSAReviewPlaybook.docx')
 pages = loader.load_and_split()
-playbook_docs = loader.load_and_split()
+text_splitter = RecursiveCharacterTextSplitter(["\n\nSection "])
+playbook_docs = loader.load_and_split(text_splitter)
 
 output_parser = RegexParser(
     regex=r".*?Issue:(.*)\nReason:(.*)\nScore:(.*)",
@@ -48,12 +52,20 @@ if section:
     try:
         answer = chain({"input_documents": playbook_docs, "msa_section": section}, return_only_outputs=True)
 
-        # for step in answer["intermediate_steps"]:
-        #     if step["score"] != "0":
-        #         st.write(f'Issue: {step["answer"]}\nReason: {step["reason"]}')
+        # df = pd.DataFrame(answer["intermediate_steps"])
+        # sorted_df = df.sort_values(by='score', ascending=False)
+        # st.dataframe(sorted_df, hide_index=True, height=500)
 
-        st.write(answer)
+        sorted_steps = sorted(answer["intermediate_steps"], key=lambda x: x["score"], reverse=True)
+        for step in answer["intermediate_steps"]:
+            if step["score"] != "0":
+                st.divider()
+                st.write(f'Issue: {step["answer"]}')
+                st.write(f'Reason: {step["reason"]}')
+                st.write(f'Score: {step["score"]}')
 
+    except ValueError as e:
+        st.write("Failed to parse output. Try again.")
+        st.write(e)
     except Exception as e:
         st.write(e)
-
