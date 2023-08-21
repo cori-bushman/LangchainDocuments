@@ -13,30 +13,38 @@ from langchain.output_parsers import RegexParser
 
 os.environ['OPENAI_API_KEY'] = openai_api_key
 
-llm = OpenAI(temperature=1, verbose=True)
+llm = OpenAI(temperature=0.1, verbose=True)
 
-loader = Docx2txtLoader('MSAReviewPlaybook.docx')
+loader = Docx2txtLoader('NewMSAPlaybook.docx')
 pages = loader.load_and_split()
-text_splitter = RecursiveCharacterTextSplitter(["\n\nSection "])
+text_splitter = RecursiveCharacterTextSplitter(["Section: ", "MSA Original Language"])
 playbook_docs = loader.load_and_split(text_splitter)
 
 output_parser = RegexParser(
     regex=r".*?Issue:(.*)\nReason:(.*)\nScore:(.*)",
     output_keys=["answer", "reason", "score"],
 )
-# Query: As a paralegal for the Service Provider, what issues can you find in the given MSA section according to the playbook?
 
-prompt_template = """MSA Playbook Context: generally acceptable and unacceptable changes
+prompt_template = """
+MSA Playbook: generally acceptable and unacceptable changes
 {context}
 
 MSA Section to Review: 
 {msa_section}
 
-Query: As a paralegal representing the Service Provider, identify language in the given MSA section that could pose risks or is unacceptable for the Service Provider based on the playbook's guidelines.
-Answer with issue, reason, and score. Use this exact format to answer:
-Issue: [Unacceptable Language Issue Found]
-Reason: [Reason why the language is unacceptable]
-Score: [Score indicating the severity of the issue on a scale of 1 to 100]"""
+Query: As a paralegal representing the Service Provider, identify language in the MSA section that is unacceptable based on the playbook guidelines.
+Answer with issue, reason, and score.
+
+Use this exact format to answer:
+Issue: [Unacceptable language found]
+Reason: [Why language is unacceptable]
+Score: [Severity of the issue, on a scale of 1 to 100]
+
+If no issues are found, respond with:
+Issue: None
+Reason: None
+Score: 0
+"""
 PROMPT = PromptTemplate(
     template=prompt_template,
     input_variables=["context", "msa_section"],
@@ -56,8 +64,8 @@ if section:
         # sorted_df = df.sort_values(by='score', ascending=False)
         # st.dataframe(sorted_df, hide_index=True, height=500)
 
-        sorted_steps = sorted(answer["intermediate_steps"], key=lambda x: x["score"], reverse=True)
-        for step in answer["intermediate_steps"]:
+        sorted_steps = sorted(answer["intermediate_steps"], key=lambda x: int(x["score"]), reverse=True)
+        for step in sorted_steps:
             if step["score"] != "0":
                 st.divider()
                 st.write(f'Issue: {step["answer"]}')
